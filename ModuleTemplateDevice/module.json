@@ -1,12 +1,12 @@
 {
-	"id": "{B052AEAB-2687-02EB-DF40-74191E242A0B}",
-	"name": "ModuleTemplate Device",
+	"id": "{1F4D83D3-2A88-1CA5-B39C-CF7D616062FF}",
+	"name": "Solarwatt Energymanager",
 	"type": 3,
 	"vendor": "",
 	"aliases": [],
 	"parentRequirements": [],
 	"childRequirements": [],
 	"implemented": [],
-	"prefix": "ModuleTemplate",
-	"url": "https://github.com/demel42/ModuleTemplate/blob/master/README.md"
+	"prefix": "Solarwatt",
+	"url": "https://github.com/demel42/Solarwatt/blob/master/README.md"
 }
