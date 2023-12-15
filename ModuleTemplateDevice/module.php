@@ -5,10 +5,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/../libs/common.php';
 require_once __DIR__ . '/../libs/local.php';
 
-class ModuleTemplateDevice extends IPSModule
+class SolarwattEnergymanager extends IPSModule
 {
-    use ModuleTemplate\StubsCommonLib;
-    use ModuleTemplateLocalLib;
+    use Solarwatt\StubsCommonLib;
+    use SolarwattLocalLib;
 
     public function __construct(string $InstanceID)
     {
