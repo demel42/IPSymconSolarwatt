@@ -1,7 +1,7 @@
 {
 	"translations": {
 		"de": {
-			"ModuleTemplate Device": "TestModule Device",
+			"Solarwatt Energymanager": "Solarwatt Energiemanager",
 
 			"__properties__": "",
 			"Disable instance": "Instanz deaktivieren",
@@ -9,13 +9,8 @@
 			"Update interval": "Aktualisierungsintervall",
 			"Seconds": "Sekunden",
 
-			"Generate message when the gateway is inactive": "Meldung erzeugen wenn der Gateway inaktiv ist",
-
 			"__actions__": "",
 			"Update status": "Aktualisiere Status",
-
-			"__messages__": "",
-			"Instance has no active gateway": "Instanz hat keinen aktiven Gateway",
 
 			"__end__": ""
 		}
