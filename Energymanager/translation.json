@@ -3,11 +3,20 @@
 		"de": {
 			"Solarwatt Energymanager": "Solarwatt Energiemanager",
 
+			"__function__": "CheckConfiguration",
+			"Host must be specified": "Hostname muss angegeben sein",
+
 			"__properties__": "",
 			"Disable instance": "Instanz deaktivieren",
 
+			"Host": "Host",
+			"Energymanager password": "Energiemanager-Passwort",
+
 			"Update interval": "Aktualisierungsintervall",
 			"Seconds": "Sekunden",
+
+			"__variables__": "",
+			"Last update": "letzte Aktualisierung",
 
 			"__actions__": "",
 			"Update status": "Aktualisiere Status",
