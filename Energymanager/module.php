@@ -31,6 +31,8 @@ class SolarwattEnergymanager extends IPSModule
         $this->RegisterPropertyString('host', '');
         $this->RegisterPropertyString('password', '');
 
+        $this->RegisterPropertyString('use_fields', json_encode([]));
+
         $this->RegisterPropertyInteger('update_interval', 60);
 
         $this->RegisterAttributeString('UpdateInfo', json_encode([]));
@@ -102,6 +104,28 @@ class SolarwattEnergymanager extends IPSModule
         }
 
         $vpos = 1;
+        $use_fields = json_decode($this->ReadPropertyString('use_fields'), true);
+        $classes = $this->GetClasses();
+        $mapping = $this->GetMapping();
+        foreach ($classes as $class) {
+            foreach ($mapping[$class] as $ent) {
+                $ident = $this->GetArrayElem($ent, 'ident', '');
+                $desc = $this->GetArrayElem($ent, 'desc', '');
+                $vartype = $this->GetArrayElem($ent, 'type', '');
+                $varprof = $this->GetArrayElem($ent, 'prof', '');
+
+                $use = false;
+                foreach ($use_fields as $field) {
+                    if ($ident == $this->GetArrayElem($field, 'ident', '')) {
+                        $use = (bool) $this->GetArrayElem($field, 'use', false);
+                        break;
+                    }
+                }
+
+                $this->SendDebug(__FUNCTION__, 'register variable: ident=' . $ident . ', vartype=' . $vartype . ', varprof=' . $varprof . ', use=' . $this->bool2str($use), 0);
+                $this->MaintainVariable($ident, $this->Translate($desc), $vartype, $varprof, $vpos++, $use);
+            }
+        }
 
         $vpos = 100;
         $this->MaintainVariable('LastUpdate', $this->Translate('Last update'), VARIABLETYPE_INTEGER, '~UnixTimestamp', $vpos++, true);
@@ -122,7 +146,7 @@ class SolarwattEnergymanager extends IPSModule
 
     private function GetFormElements()
     {
-        $formElements = $this->GetCommonFormElements('olarwatt Energymanager');
+        $formElements = $this->GetCommonFormElements('Solarwatt Energymanager');
 
         if ($this->GetStatus() == self::$IS_UPDATEUNCOMPLETED) {
             return $formElements;
@@ -152,6 +176,90 @@ class SolarwattEnergymanager extends IPSModule
             'suffix'  => 'Seconds',
             'minimum' => 0,
             'caption' => 'Update interval',
+        ];
+
+        $values = [];
+        $use_fields = json_decode($this->ReadPropertyString('use_fields'), true);
+        $classes = $this->GetClasses();
+        $mapping = $this->GetMapping();
+        foreach ($classes as $class) {
+            foreach ($mapping[$class] as $ent) {
+                $elem = $this->GetArrayElem($ent, 'elem', '');
+                $fld = $class . '/' . $elem;
+                $ident = $this->GetArrayElem($ent, 'ident', '');
+                $desc = $this->GetArrayElem($ent, 'desc', '');
+                $alias = $this->GetArrayElem($ent, 'alias', '');
+                $use = false;
+                foreach ($use_fields as $field) {
+                    if ($ident == $this->GetArrayElem($field, 'ident', '')) {
+                        $use = (bool) $this->GetArrayElem($field, 'use', false);
+                        break;
+                    }
+                }
+                $this->SendDebug(__FUNCTION__, 'ident=' . $ident . ', alias=' . $alias . ', desc=' . $desc, 0);
+                @$varID = $this->GetIDForIdent($ident);
+                $varID = $varID !== false ? '#' . $varID : '';
+                $name = $alias != '' ? $this->Translate($alias) . ' (' . $this->Translate($desc) . ')' : $this->Translate($desc);
+                $values[] = [
+                    'ident' => $ident,
+                    'desc'  => $name,
+                    'fld'   => $fld,
+                    'use'   => $use,
+                    'varID' => $varID,
+                ];
+            }
+        }
+        $this->SendDebug(__FUNCTION__, 'values=' . print_r($values, true), 0);
+
+        $formElements[] = [
+            'type'     => 'ExpansionPanel',
+            'items'    => [
+                [
+                    'type'     => 'List',
+                    'name'     => 'use_fields',
+                    'caption'  => 'Available variables',
+                    'rowCount' => count($values),
+                    'add'      => false,
+                    'delete'   => false,
+                    'columns'  => [
+                        [
+                            'caption' => 'Ident',
+                            'name'    => 'ident',
+                            'width'   => '300px',
+                            'save'    => true
+                        ],
+                        [
+                            'caption' => 'Description',
+                            'name'    => 'desc',
+                            'width'   => 'auto',
+                            'save'    => false,
+                        ],
+                        [
+                            'caption' => 'Field',
+                            'name'    => 'fld',
+                            'width'   => '300px',
+                            'save'    => false,
+                        ],
+                        [
+                            'caption' => 'use',
+                            'name'    => 'use',
+                            'width'   => '100px',
+                            'edit'    => [
+                                'type' => 'CheckBox'
+                            ],
+                        ],
+                        [
+                            'caption' => 'ID',
+                            'name'    => 'varID',
+                            'width'   => '100px',
+                            'save'    => false,
+                        ],
+                    ],
+                    'values'   => $values
+                ],
+            ],
+            'caption'  => 'Variables',
+            'expanded' => false,
         ];
 
         return $formElements;
@@ -299,10 +407,21 @@ class SolarwattEnergymanager extends IPSModule
             return;
         }
 
+        $now = time();
+
         $data = '';
         $statuscode = $this->do_HttpRequest('/rest/kiwigrid/wizard/devices', '', '', 'GET', $data);
-
         if ($statuscode == 0) {
+            $use_idents = [];
+            $use_fields = json_decode($this->ReadPropertyString('use_fields'), true);
+            foreach ($use_fields as $field) {
+                $ident = $this->GetArrayElem($field, 'ident', '');
+                $use = (bool) $this->GetArrayElem($field, 'use', false);
+                if ($use && $ident != false) {
+                    $use_idents[] = $ident;
+                }
+            }
+
             $components = [];
             if (isset($data['result']['items'])) {
                 $items = $data['result']['items'];
@@ -350,79 +469,120 @@ class SolarwattEnergymanager extends IPSModule
             ksort($components);
             $this->SendDebug(__FUNCTION__, 'components=' . print_r($components, true), 0);
 
-            $mapping = $this->GetMapping();
-
             $idx = 0;
             $fnd = false;
-            foreach ($mapping as $class => $map) {
-                foreach ($map as $ent) {
-                    $fld = $class . '.devices.' . $idx . '.vars.' . $ent['elem'];
-                    $org = $this->GetArrayElem($components, $fld, '', $fnd);
-                    $unit = '';
-                    $fmt = '';
-                    switch ($ent['type']) {
+            $classes = $this->GetClasses();
+            $mapping = $this->GetMapping();
+            foreach ($classes as $class) {
+                foreach ($mapping[$class] as $ent) {
+                    $ident = $this->GetArrayElem($ent, 'ident', '');
+                    if (in_array($ident, $use_idents) == false) {
+                        continue;
+                    }
+                    $desc = $this->GetArrayElem($ent, 'desc', '');
+                    $vartype = $this->GetArrayElem($ent, 'type', '');
+                    $varprof = $this->GetArrayElem($ent, 'prof', '');
+                    $factor = (float) $this->GetArrayElem($ent, 'factor', 1);
+                    $elem = $this->GetArrayElem($ent, 'elem', '');
+                    $fld = $class . '.devices.' . $idx . '.vars.' . $elem;
+                    $raw = $this->GetArrayElem($components, $fld, '', $fnd);
+                    if ($fnd == false) {
+                        $this->SendDebug(__FUNCTION__, 'set ' . $fld . ' is missing -> ignored', 0);
+                        continue;
+                    }
+
+                    switch ($vartype) {
                         case VARIABLETYPE_BOOLEAN:
-                            $val = boolval($org);
+                            $val = boolval($raw);
                             break;
                         case VARIABLETYPE_INTEGER:
-                            switch ($ent['prof']) {
-                                case '~UnixTimestamp':
-                                    $val = (int) floor(intval($org) / 1000);
-                                    $fmt = ' (' . date('d.m.Y H:i', $val) . ')';
-                                    break;
-                                default:
-                                    $val = intval($org);
-                                    break;
-                            }
+                            $val = (int) (intval($raw) * $factor);
                             break;
                         case VARIABLETYPE_FLOAT:
-                            switch ($ent['elem']) {
-                                case 'StateOfCharge':
-                                case 'StateOfHealth':
-                                    $val = floatval($org) / 100;
-                                    break;
-                                default:
-                                    $val = floatval($org);
-                                    break;
-                            }
-                            switch ($ent['prof']) {
-                                case 'kW':
-                                case 'kWh':
-                                    $val /= 1000;
-                                    $fmt = ' (' . $this->format_float($val, 1) . ')';
-                                    $unit = $ent['prof'];
-                                    break;
-                                case 'W':
-                                case 'Wh':
-                                    $fmt = ' (' . $this->format_float($val, 1) . ')';
-                                    $unit = $ent['prof'];
-                                    break;
-                                case '%':
-                                    $unit = $ent['prof'];
-                                    $fmt = ' (' . $this->format_float($val * 100, 0) . ')';
-                                    break;
-                                case 'MB':
-                                    $val = $val / 1024 / 1024;
-                                    $unit = $ent['prof'];
-                                    $fmt = ' (' . $this->format_float($val, 0) . ')';
-                                    break;
-                                case 'MB':
-                                    $val = $val / 1024 / 1024 / 1024;
-                                    $unit = $ent['prof'];
-                                    $fmt = ' (' . $this->format_float($val, 2) . ')';
-                                    break;
-                                default:
-                                    $fmt = ' (' . $this->format_float($val, 1) . ')';
-                                    break;
-                            }
+                            $val = floatval($raw) * $factor;
                             break;
                         case VARIABLETYPE_STRING:
-                            $val = $org;
+                            $val = $raw;
+                            if ($varprof != '' && $this->CheckVarProfile4Value($varprof, $val) == false) {
+                                $this->LogMessage(__FUNCTION__ . ': unknown value "' . $raw . '" for variable "' . $ident . '"', KL_WARNING);
+                            }
                             break;
                     }
-                    $this->SendDebug(__FUNCTION__, 'field=' . $fld . ': org="' . $org . '", val=' . $val . $fmt . ' ' . $unit, 0);
+
+                    $this->SetValue($ident, $val);
+                    $fmt = $this->GetValueFormatted($ident);
+                    if ($val > 0 && $varprof == 'Solarwatt.Duration') {
+                        $sec = $val;
+                        $s = '';
+                        if ($sec > 86400) {
+                            $day = floor($sec / 86400);
+                            $sec = $sec % 86400;
+
+                            $sec -= floor($sec % 60);
+                            if ($day > 3) {
+                                $sec -= floor($sec % 3600);
+                            }
+                            if ($day > 10) {
+                                $sec -= floor($sec % 86400);
+                            }
+
+                            $s .= sprintf('%dd', $day);
+                        }
+                        if ($sec > 3600) {
+                            $hour = floor($sec / 3600);
+                            $sec = $sec % 3600;
+
+                            $s .= sprintf('%dh', $hour);
+                        }
+                        if ($sec > 60) {
+                            $min = floor($sec / 60);
+                            $sec = $sec % 60;
+
+                            $s .= sprintf('%dm', $min);
+                        }
+                        if ($sec > 0) {
+                            $s .= sprintf('%ds', $sec);
+                        }
+
+                        $d = date('d.m.Y H:i', time() - $val);
+
+                        $fmt .= ' (' . $s . ' / ' . $d . ')';
+                    }
+                    $this->SendDebug(__FUNCTION__, 'set ' . $fld . '="' . $raw . '" to ' . $ident . ' => ' . $fmt, 0);
                 }
             }
+
+            $powerAll = [];
+            $energyAll = [];
+            foreach ($classes as $class) {
+                $powerList = [];
+                $energyList = [];
+                foreach ($mapping[$class] as $ent) {
+                    $elem = $this->GetArrayElem($ent, 'elem', '');
+                    $ident = $this->GetArrayElem($ent, 'ident', '');
+                    $fld = $class . '.devices.' . $idx . '.vars.' . $elem;
+                    $raw = $this->GetArrayElem($components, $fld, '', $fnd);
+                    if ($fnd == false) {
+                        continue;
+                    }
+                    if (preg_match('/^Power/', $elem)) {
+                        $powerList[$elem] = $this->format_float(floatval($raw), 2) . ' W / ' . $this->format_float(floatval($raw) / 1000, 1) . ' kW';
+                    }
+                    if (preg_match('/^Work/', $elem)) {
+                        $energyList[$elem] = $this->format_float(floatval($raw), 2) . ' Wh / ' . $this->format_float(floatval($raw) / 1000, 1) . ' kWh';
+                    }
+                }
+                if ($powerList != []) {
+                    $powerAll[$class] = $powerList;
+                }
+                if ($energyList != []) {
+                    $energyAll[$class] = $energyList;
+                }
+            }
+            $this->SendDebug(__FUNCTION__, 'power=' . print_r($powerAll, true), 0);
+            $this->SendDebug(__FUNCTION__, 'energy=' . print_r($energyAll, true), 0);
+
+            $this->SetValue('LastUpdate', $now);
         }
 
         $this->SendDebug(__FUNCTION__, $this->PrintTimer('UpdateStatus'), 0);
@@ -472,519 +632,523 @@ class SolarwattEnergymanager extends IPSModule
     private function GetMapping()
     {
         $mapping = [
-            'BatteryFlex' => [
-                /*
-                [
-                    'elem'  => 'ACPower',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                    [
-                        'elem' => 'BatteryError',
-                        'type'  => VARIABLETYPE_STRING,
-                        'prof'  => '',
-                    ],
-                 */
-                [
-                    'name'  => 'Mode of the battery',
-                    'ident' => 'Battery_ModeConverter',
-                    'elem'  => 'ModeConverter',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
-                ],
-                [
-                    'name'  => 'State of the battery',
-                    'ident' => 'Battery_State',
-                    'elem'  => 'StateDevice',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
-                ],
-                [
-                    'name'  => 'State of charge of the battery',
-                    'ident' => 'Battery_StateOfCharge',
-                    'elem'  => 'StateOfCharge',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                [
-                    'name'  => 'State of health of the battery',
-                    'ident' => 'Battery_StateOfHealth',
-                    'elem'  => 'StateOfHealth',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                /*
-                    [
-                        'elem' => 'SysErr',
-                        'type'  => VARIABLETYPE_STRING,
-                        'prof'  => '',
-                    ],
-                    [
-                        'elem' => 'SysStat',
-                        'type'  => VARIABLETYPE_STRING,
-                        'prof'  => '',
-                    ],
-                 */
-                [
-                    'name'  => 'Temperature of the battery',
-                    'ident' => 'Battery_Temperature',
-                    'elem'  => 'TemperatureBattery',
-                    'type'  => VARIABLETYPE_INTEGER,
-                    'prof'  => '°C',
-                ],
-                [
-                    'name'  => 'Uptime of the battery',
-                    'ident' => 'Battery_Uptime',
-                    'elem'  => 'UpTimePDG',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => 'Duration',
-                ],
-                [
-                    'name'  => 'Energy fed into the battery',
-                    'ident' => 'Battery_WorkACIn',
-                    'elem'  => 'WorkACIn',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
-                ],
-                [
-                    'name'  => 'Energy supplied from the battery',
-                    'ident' => 'Battery_WorkACOut',
-                    'elem'  => 'WorkACOut',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
-                ],
-                [
-                    'name'  => 'Energy capacity of the battery',
-                    'ident' => 'Battery_EnergyCapacity',
-                    'elem'  => 'WorkCapacity',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
-                ],
-                [
-                    'name'  => 'Energy capacity charged into the battery',
-                    'ident' => 'Battery_EnergyCharged',
-                    'elem'  => 'WorkCharged',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
-                ],
-                [
-                    'name'  => 'Energy discharged out of the battery',
-                    'ident' => 'Battery_EnergyDischarged',
-                    'elem'  => 'WorkDischarged',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
-                ],
-            ],
-            'BatteryFlexPowermeter' => [
-                [
-                    'name'  => 'State of the battery powermeter',
-                    'ident' => 'BatteryPowermeter_State',
-                    'elem'  => 'StateDevice',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
-                ],
-                [
-                    'name'  => 'metering direction of the battery powermeter',
-                    'ident' => 'BatteryPowermeter_DirectionMetering',
-                    'elem'  => 'DirectionMetering',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
-                ],
-                [
-                    'name'  => 'Energy fed into the battery',
-                    'ident' => 'BatteryPowermeter_WorkIn',
-                    'elem'  => 'WorkIn',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'Wh',
-                ],
-                [
-                    'name'  => 'Energy supplied from the battery',
-                    'ident' => 'BatteryPowermeter_WorkOut',
-                    'elem'  => 'WorkOut',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'Wh',
-                ],
-            ],
-            'EnergyManager' => [
-                [
-                    'name'  => 'Last contact of the energymanager to the cloud',
-                    'ident' => 'Energymanager_LastContact',
-                    'elem'  => 'DateCloudLastSeen',
-                    'type'  => VARIABLETYPE_INTEGER,
-                    'prof'  => '~UnixTimestamp',
-                ],
-                [
-                    'name'  => 'Total load of the energymanager',
-                    'ident' => 'Energymanager_LoadTotal',
-                    'elem'  => 'FractionCPULoadTotal',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                [
-                    'name'  => 'System load of the energymanager',
-                    'ident' => 'Energymanager_LoadSys',
-                    'elem'  => 'FractionCPULoadKernel',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                [
-                    'name'  => 'User load of the energymanager',
-                    'ident' => 'Energymanager_LoadUsr',
-                    'elem'  => 'FractionCPULoadUser',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                [
-                    'name'  => 'Average load of last 1m of the energymanager',
-                    'ident' => 'Energymanager_Load1m',
-                    'elem'  => 'FractionCPULoadAverageLastMinute',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                [
-                    'name'  => 'Average load of last 5m of the energymanager',
-                    'ident' => 'Energymanager_Load5m',
-                    'elem'  => 'FractionCPULoadAverageLastFiveMinutes',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                [
-                    'name'  => 'Average load of last 15m of the energymanager',
-                    'ident' => 'Energymanager_Load15m',
-                    'elem'  => 'FractionCPULoadAverageLastFifteenMinutes',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => '%',
-                ],
-                [
-                    'name'  => 'Total memory of the energymanager',
-                    'ident' => 'Energymanager_MemTotal',
-                    'elem'  => 'StatusMonitoringMap.memory_total',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'MB',
-                ],
-                [
-                    'name'  => 'Avail memory of the energymanager',
-                    'ident' => 'Energymanager_MemAvail',
-                    'elem'  => 'StatusMonitoringMap.memory_available',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'MB',
-                ],
-                [
-                    'name'  => 'Disk size of the energymanager',
-                    'ident' => 'Energymanager_DiskSize',
-                    'elem'  => 'StatusMonitoringMap.disk_size',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'GB',
-                ],
-                [
-                    'name'  => 'Free disk size of the energymanager',
-                    'ident' => 'Energymanager_DiskFree',
-                    'elem'  => 'StatusMonitoringMap.disk_free',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'GB',
-                ],
-                [
-                    'name'  => 'State of the energymanager',
-                    'ident' => 'Energymanager_State',
-                    'elem'  => 'StateDevice',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
-                ],
-                [
-                    'name'  => 'Uptime of the energymanager',
-                    'ident' => 'Energymanager_Uptime',
-                    'elem'  => 'TimeSinceStart',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => 'Duration',
-                ],
-            ],
             'Location' => [
                 [
-                    'name'  => 'Power stored in the battery',
-                    'ident' => 'PowerToBattery',
-                    'elem'  => 'PowerBuffered',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power from grid stored in the battery',
-                    'ident' => 'PowerToBatteryFromGrid',
-                    'elem'  => 'PowerBufferedFromGrid',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power from PV stored in the battery',
-                    'ident' => 'PowerToBatteryFromPV',
-                    'elem'  => 'PowerBufferedFromProducers',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Total power consumed by all consumers',
-                    'ident' => 'PowerConsumed',
-                    'elem'  => 'PowerConsumed',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power consumed from the grid',
-                    'ident' => 'PowerConsumedFromGrid',
-                    'elem'  => 'PowerConsumedFromGrid',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power direct consumed from the PV',
-                    'ident' => 'PowerConsumedFromPV',
-                    'elem'  => 'PowerConsumedFromProducers',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power consumed from the battery',
-                    'ident' => 'PowerConsumedFromBattery',
-                    'elem'  => 'PowerConsumedFromStorage',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power fed into the grid',
-                    'ident' => 'PowerFromGrid',
-                    'elem'  => 'PowerIn',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power delivered to the grid',
-                    'ident' => 'PowerToGrid',
-                    'elem'  => 'PowerOut',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power delivered to the grid direct from the PV',
-                    'ident' => 'PowerToGridFromPV',
-                    'elem'  => 'PowerOutFromProducers',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power delivered to the grid direct from the battery',
-                    'ident' => 'PowerToGridFromBattery',
-                    'elem'  => 'PowerOutFromStorage',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power produced by the PV',
-                    'ident' => 'PowerProduced',
-                    'elem'  => 'PowerProduced',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                /*
-                    [
-                        'elem' => 'PowerReleased',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kW',
-                    ],
-                 */
-                [
-                    'name'  => 'Power consumed direct from the PV plus energy stored',
-                    'ident' => 'PowerSelfConsumed',
-                    'elem'  => 'PowerSelfConsumed',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'Power consumed direct from the PV plus energy consumed from the battery',
-                    'ident' => 'PowerSelfSupplied',
-                    'elem'  => 'PowerSelfSupplied',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kW',
-                ],
-                [
-                    'name'  => 'State of location',
+                    'desc'  => 'State of location',
                     'ident' => 'Location_State',
                     'elem'  => 'StateDevice',
                     'type'  => VARIABLETYPE_STRING,
                     'prof'  => '',
                 ],
                 [
-                    'name'  => 'Energy stored in the battery',
-                    'ident' => 'EnergyToBattery',
+                    'desc'  => 'Power stored in the storage',
+                    'alias' => 'Stored',
+                    'ident' => 'PowerToStorage',
+                    'elem'  => 'PowerBuffered',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power from grid stored in the storage',
+                    'ident' => 'PowerToStorageFromGrid',
+                    'elem'  => 'PowerBufferedFromGrid',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power from PV stored in the storage',
+                    'ident' => 'PowerToStorageFromPV',
+                    'elem'  => 'PowerBufferedFromProducers',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Total power consumed',
+                    'alias' => 'Consumption',
+                    'ident' => 'PowerConsumed',
+                    'elem'  => 'PowerConsumed',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power consumed from the grid',
+                    'ident' => 'PowerConsumedFromGrid',
+                    'elem'  => 'PowerConsumedFromGrid',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'   => 'Power consumed from the PV',
+                    'alias'  => 'Direct consumption',
+                    'ident'  => 'PowerConsumedFromPV',
+                    'elem'   => 'PowerConsumedFromProducers',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power consumed from the storage',
+                    'alias' => 'Used',
+                    'ident' => 'PowerConsumedFromStorage',
+                    'elem'  => 'PowerConsumedFromStorage',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power fed from the grid',
+                    'alias' => 'Purchased',
+                    'ident' => 'PowerFromGrid',
+                    'elem'  => 'PowerIn',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power delivered to the grid',
+                    'alias' => 'Feed-in',
+                    'ident' => 'PowerToGrid',
+                    'elem'  => 'PowerOut',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power delivered to the grid direct from the PV',
+                    'ident' => 'PowerToGridFromPV',
+                    'elem'  => 'PowerOutFromProducers',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Power delivered to the grid direct from the storage',
+                    'ident' => 'PowerToGridFromStorage',
+                    'elem'  => 'PowerOutFromStorage',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Total power produced',
+                    'alias' => 'Production',
+                    'ident' => 'PowerProduced',
+                    'elem'  => 'PowerProduced',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'   => 'Power consumed direct from the PV plus energy stored',
+                    'ident'  => 'PowerSelfConsumed',
+                    'elem'   => 'PowerSelfConsumed',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kW',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Power consumed direct from the PV and from the storage',
+                    'ident'  => 'PowerSelfSupplied',
+                    'elem'   => 'PowerSelfSupplied',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kW',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'  => 'Energy stored in the storage',
+                    'alias' => 'Stored',
+                    'ident' => 'EnergyToStorage',
                     'elem'  => 'WorkBuffered',
                     'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'prof'  => 'Solarwatt.Wh',
                 ],
                 [
-                    'name'  => 'Energy from grid stored in the battery',
-                    'ident' => 'EnergyToBatteryFromGrid',
+                    'desc'  => 'Energy from grid stored in the storage',
+                    'ident' => 'EnergyToStorageFromGrid',
                     'elem'  => 'WorkBufferedFromGrid',
                     'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'prof'  => 'Solarwatt.Wh',
                 ],
                 [
-                    'name'  => 'Energy from PV stored in the battery',
-                    'ident' => 'EnergyToBatteryFromPV',
+                    'desc'  => 'Energy from PV stored in the storage',
+                    'ident' => 'EnergyToStorageFromPV',
                     'elem'  => 'WorkBufferedFromProducers',
                     'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'prof'  => 'Solarwatt.Wh',
                 ],
                 [
-                    'name'  => 'Total energy consumed by all consumers',
-                    'ident' => 'EnergyConsumed',
-                    'elem'  => 'WorkConsumed',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Total energy consumed',
+                    'alias'  => 'Consumption',
+                    'ident'  => 'EnergyConsumed',
+                    'elem'   => 'WorkConsumed',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy consumed from the grid',
-                    'ident' => 'EnergyConsumedFromGrid',
-                    'elem'  => 'WorkConsumedFromGrid',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Energy consumed from the grid',
+                    'ident'  => 'EnergyConsumedFromGrid',
+                    'elem'   => 'WorkConsumedFromGrid',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy direct consumed from the PV',
-                    'ident' => 'EnergyConsumedFromPV',
-                    'elem'  => 'WorkConsumedFromProducers',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Energy consumed from the PV',
+                    'alias'  => 'Direct consumption',
+                    'ident'  => 'EnergyConsumedFromPV',
+                    'elem'   => 'WorkConsumedFromProducers',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy consumed from the battery',
-                    'ident' => 'EnergyConsumedFromBattery',
-                    'elem'  => 'WorkConsumedFromStorage',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Energy consumed from the storage',
+                    'alias'  => 'Used',
+                    'ident'  => 'EnergyConsumedFromStorage',
+                    'elem'   => 'WorkConsumedFromStorage',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy fed into the grid',
-                    'ident' => 'EnergyFromGrid',
-                    'elem'  => 'WorkIn',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Energy fed from the grid',
+                    'alias'  => 'Purchased',
+                    'ident'  => 'EnergyFromGrid',
+                    'elem'   => 'WorkIn',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy delivered to the grid',
-                    'ident' => 'EnergyToGrid',
-                    'elem'  => 'WorkOut',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Energy delivered to the grid',
+                    'alias'  => 'Feed-in',
+                    'ident'  => 'EnergyToGrid',
+                    'elem'   => 'WorkOut',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy delivered to the grid direct from the PV',
-                    'ident' => 'EnergyToGridFromPV',
-                    'elem'  => 'WorkOutFromProducers',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Energy delivered to the grid direct from the PV',
+                    'ident'  => 'EnergyToGridFromPV',
+                    'elem'   => 'WorkOutFromProducers',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy delivered to the grid direct from the battery',
-                    'ident' => 'EnergyToGridFromBattery',
-                    'elem'  => 'WorkOutFromStorage',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Energy delivered to the grid direct from the storage',
+                    'ident'  => 'EnergyToGridFromStorage',
+                    'elem'   => 'WorkOutFromStorage',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy produced by the PV',
-                    'ident' => 'EnergyProduced',
-                    'elem'  => 'WorkProduced',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
-                ],
-                /*
-                    [
-                        'elem' => 'WorkReleased',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kWh',
-                    ],
-                 */
-                [
-                    'name'  => 'Energy consumed direct from the PV plus energy stored',
-                    'ident' => 'EnergySelfConsumed',
-                    'elem'  => 'WorkSelfConsumed',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'desc'   => 'Total energy produced',
+                    'alias'  => 'Production',
+                    'ident'  => 'EnergyProduced',
+                    'elem'   => 'WorkProduced',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
                 ],
                 [
-                    'name'  => 'Energy consumed direct from the PV plus energy consumed from the battery',
-                    'ident' => 'EnergySelfSupplied',
-                    'elem'  => 'WorkSelfSupplied',
+                    'desc'   => 'Energy consumed direct from the PV plus energy stored',
+                    'ident'  => 'EnergySelfConsumed',
+                    'elem'   => 'WorkSelfConsumed',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Energy consumed direct from the PV and from the storage',
+                    'ident'  => 'EnergySelfSupplied',
+                    'elem'   => 'WorkSelfSupplied',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
+                ],
+            ],
+            'EnergyManager' => [
+                [
+                    'desc'  => 'State of the energymanager',
+                    'ident' => 'Energymanager_State',
+                    'elem'  => 'StateDevice',
+                    'type'  => VARIABLETYPE_STRING,
+                    'prof'  => '',
+                ],
+                [
+                    'desc'   => 'Uptime of the energymanager',
+                    'ident'  => 'Energymanager_Uptime',
+                    'elem'   => 'TimeSinceStart',
+                    'type'   => VARIABLETYPE_INTEGER,
+                    'prof'   => 'Solarwatt.Duration',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Last contact of the energymanager to the cloud',
+                    'ident'  => 'Energymanager_LastContact',
+                    'elem'   => 'DateCloudLastSeen',
+                    'type'   => VARIABLETYPE_INTEGER,
+                    'prof'   => '~UnixTimestamp',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'  => 'Total load on the energymanager',
+                    'ident' => 'Energymanager_LoadTotal',
+                    'elem'  => 'FractionCPULoadTotal',
                     'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'kWh',
+                    'prof'  => 'Solarwatt.Load',
+                ],
+                [
+                    'desc'  => 'System load on the energymanager',
+                    'ident' => 'Energymanager_LoadSys',
+                    'elem'  => 'FractionCPULoadKernel',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Load',
+                ],
+                [
+                    'desc'  => 'User load on the energymanager',
+                    'ident' => 'Energymanager_LoadUsr',
+                    'elem'  => 'FractionCPULoadUser',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Load',
+                ],
+                [
+                    'desc'  => 'Load of last 1m on the energymanager',
+                    'ident' => 'Energymanager_Load1m',
+                    'elem'  => 'FractionCPULoadAverageLastMinute',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Load',
+                ],
+                [
+                    'desc'  => 'Load of last 5m on the energymanager',
+                    'ident' => 'Energymanager_Load5m',
+                    'elem'  => 'FractionCPULoadAverageLastFiveMinutes',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Load',
+                ],
+                [
+                    'desc'  => 'Load of last 15m on the energymanager',
+                    'ident' => 'Energymanager_Load15m',
+                    'elem'  => 'FractionCPULoadAverageLastFifteenMinutes',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Load',
+                ],
+                [
+                    'desc'   => 'Total memory of the energymanager',
+                    'ident'  => 'Energymanager_MemTotal',
+                    'elem'   => 'StatusMonitoringMap.memory_total',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.MB',
+                    'factor' => 1 / (1024 * 1024),
+                ],
+                [
+                    'desc'   => 'Avail memory of the energymanager',
+                    'ident'  => 'Energymanager_MemAvail',
+                    'elem'   => 'StatusMonitoringMap.memory_available',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.MB',
+                    'factor' => 1 / (1024 * 1024),
+                ],
+                [
+                    'desc'   => 'Disk size of the energymanager',
+                    'ident'  => 'Energymanager_DiskSize',
+                    'elem'   => 'StatusMonitoringMap.disk_size',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.MB',
+                    'factor' => 1 / (1024 * 1024),
+                ],
+                [
+                    'desc'   => 'Available disk space of the energymanager',
+                    'ident'  => 'Energymanager_DiskFree',
+                    'elem'   => 'StatusMonitoringMap.disk_free',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.MB',
+                    'factor' => 1 / (1024 * 1024),
+                ],
+            ],
+            'S0Counter' => [
+                [
+                    'desc'  => 'State of the powermeter',
+                    'ident' => 'S0Counter_State',
+                    'elem'  => 'StateDevice',
+                    'type'  => VARIABLETYPE_STRING,
+                    'prof'  => '',
                 ],
             ],
             'PVPlant' => [
                 [
-                    'name'  => 'Power produced by the PV',
-                    'ident' => 'PV_PowerProduced',
-                    'elem'  => 'PowerACOut',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'W',
-                ],
-                [
-                    'name'  => 'State of the PV',
+                    'desc'  => 'State of the PV',
                     'ident' => 'PV_State',
                     'elem'  => 'StateDevice',
                     'type'  => VARIABLETYPE_STRING,
                     'prof'  => '',
                 ],
                 [
-                    'name'  => 'Energy produced by the PV',
+                    'desc'  => 'Power produced by the PV',
+                    'ident' => 'PV_PowerProduced',
+                    'elem'  => 'PowerACOut',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.W',
+                ],
+                [
+                    'desc'  => 'Energy produced by the PV',
                     'ident' => 'PV_EnergyProduced',
                     'elem'  => 'WorkACOut',
                     'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'Wh',
+                    'prof'  => 'Solarwatt.Wh',
                 ],
             ],
-            'S0Counter' => [
-                /*
-                    [
-                        'elem' => 'InjectionEnergyNet',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kWh',
-                    ],
-                    [
-                        'elem' => 'InjectionEnergySum',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kWh',
-                    ],
-                    [
-                        'elem' => 'PowerIn',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kW',
-                    ],
-                    [
-                        'elem' => 'PowerOut',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kW',
-                    ],
-                 */
+            'BatteryFlex' => [
                 [
-                    'name'  => 'State of the powermeter',
-                    'ident' => 'S0Counter_State',
+                    'desc'  => 'Operation mode of the battery',
+                    'ident' => 'Battery_ModeConverter',
+                    'elem'  => 'ModeConverter',
+                    'type'  => VARIABLETYPE_STRING,
+                    'prof'  => 'Solarwatt.BatteryConverterMode',
+                ],
+                [
+                    'desc'  => 'State of the battery',
+                    'ident' => 'Battery_State',
                     'elem'  => 'StateDevice',
                     'type'  => VARIABLETYPE_STRING,
                     'prof'  => '',
                 ],
-                /*
-                    [
-                        'elem' => 'WorkIn',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kWh',
-                    ],
-                    [
-                        'elem' => 'WorkOut',
-                        'type'  => VARIABLETYPE_FLOAT,
-                        'prof'  => 'kWh',
-                    ],
-                 */
+                [
+                    'desc'  => 'State of charge of the battery',
+                    'ident' => 'Battery_StateOfCharge',
+                    'elem'  => 'StateOfCharge',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Percent',
+                ],
+                [
+                    'desc'  => 'State of health of the battery',
+                    'ident' => 'Battery_StateOfHealth',
+                    'elem'  => 'StateOfHealth',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Percent',
+                ],
+                [
+                    'desc'  => 'Temperature of the battery',
+                    'ident' => 'Battery_Temperature',
+                    'elem'  => 'TemperatureBattery',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Temperature',
+                ],
+                [
+                    'desc'  => 'Minimum temperature of the battery',
+                    'ident' => 'Battery_TemperatureMin',
+                    'elem'  => 'TemperatureBatteryMin',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Temperature',
+                ],
+                [
+                    'desc'  => 'Maximum temperature of the battery',
+                    'ident' => 'Battery_TemperatureMax',
+                    'elem'  => 'TemperatureBatteryMax',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Temperature',
+                ],
+                [
+                    'desc'  => 'Mean temperature of the battery',
+                    'ident' => 'Battery_TemperatureMean',
+                    'elem'  => 'TemperatureBatteryMean',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Temperature',
+                ],
+                [
+                    'desc'   => 'Energy fed into the battery',
+                    'ident'  => 'Battery_WorkACIn',
+                    'elem'   => 'WorkACIn',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Energy supplied from the battery',
+                    'ident'  => 'Battery_WorkACOut',
+                    'elem'   => 'WorkACOut',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Energy capacity of the battery',
+                    'ident'  => 'Battery_EnergyCapacity',
+                    'elem'   => 'WorkCapacity',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Energy capacity charged into the battery',
+                    'ident'  => 'Battery_EnergyCharged',
+                    'elem'   => 'WorkCharged',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Energy discharged out of the battery',
+                    'ident'  => 'Battery_EnergyDischarged',
+                    'elem'   => 'WorkDischarged',
+                    'type'   => VARIABLETYPE_FLOAT,
+                    'prof'   => 'Solarwatt.kWh',
+                    'factor' => 1 / 1000,
+                ],
+            ],
+            'BatteryFlexPowermeter' => [
+                [
+                    'desc'  => 'State of the battery powermeter',
+                    'ident' => 'BatteryPowermeter_State',
+                    'elem'  => 'StateDevice',
+                    'type'  => VARIABLETYPE_STRING,
+                    'prof'  => '',
+                ],
+                [
+                    'desc'  => 'Metering direction of the battery powermeter',
+                    'ident' => 'BatteryPowermeter_DirectionMetering',
+                    'elem'  => 'DirectionMetering',
+                    'type'  => VARIABLETYPE_STRING,
+                    'prof'  => 'Solarwatt.PowermeterDirection',
+                ],
+                [
+                    'desc'  => 'Energy fed into the battery',
+                    'ident' => 'BatteryPowermeter_WorkIn',
+                    'elem'  => 'WorkIn',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Wh',
+                ],
+                [
+                    'desc'  => 'Energy supplied from the battery',
+                    'ident' => 'BatteryPowermeter_WorkOut',
+                    'elem'  => 'WorkOut',
+                    'type'  => VARIABLETYPE_FLOAT,
+                    'prof'  => 'Solarwatt.Wh',
+                ],
             ],
         ];
 
         return $mapping;
     }
+
+    private function GetClasses()
+    {
+        $classes = [
+            'Location',
+            'EnergyManager',
+            'S0Counter',
+            'PVPlant',
+            'BatteryFlex',
+            'BatteryFlexPowermeter',
+        ];
+
+        return $classes;
+    }
 }
+/*
+[PowerStringDCIn] =>
+[PowerYieldSum] =>
+[ResistanceBatteryMax] => 0.002
+[ResistanceBatteryMean] => 0.002
+[ResistanceBatteryMin] => 0.002
+[ResistanceBatteryString] =>
+[TemperatureBatteryCellMax] => 22
+[TemperatureBatteryCellMin] => 19
+ */

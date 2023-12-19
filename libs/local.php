@@ -49,5 +49,31 @@ trait SolarwattLocalLib
         if ($reInstall) {
             $this->SendDebug(__FUNCTION__, 'reInstall=' . $this->bool2str($reInstall), 0);
         }
+
+        $this->CreateVarProfile('Solarwatt.Duration', VARIABLETYPE_INTEGER, ' s', 0, 0, 0, 0, 'Clock', [], $reInstall);
+
+        $this->CreateVarProfile('Solarwatt.MB', VARIABLETYPE_FLOAT, ' MB', 0, 0, 0, 0, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.GB', VARIABLETYPE_FLOAT, ' GB', 0, 0, 0, 0, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.Load', VARIABLETYPE_FLOAT, '', 0, 0, 0, 2, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.Percent', VARIABLETYPE_FLOAT, ' %', 0, 100, 0, 0, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.Temperature', VARIABLETYPE_FLOAT, ' °C', 0, 0, 0, 0, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.Wh', VARIABLETYPE_FLOAT, ' Wh', 0, 0, 0, 0, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.kWh', VARIABLETYPE_FLOAT, ' kWh', 0, 0, 0, 1, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.W', VARIABLETYPE_FLOAT, ' W', 0, 0, 0, 0, '', [], $reInstall);
+        $this->CreateVarProfile('Solarwatt.kW', VARIABLETYPE_FLOAT, ' kW', 0, 0, 0, 1, '', [], $reInstall);
+
+        $associations = [
+            ['Wert' => 'IN', 'Name' => $this->Translate('Purchase'), 'Farbe' => -1],
+            ['Wert' => 'OUT', 'Name' => $this->Translate('Feed-in'), 'Farbe' => -1],
+            ['Wert' => 'BIDIRECTIONAL', 'Name' => $this->Translate('In both directions'), 'Farbe' => -1],
+        ];
+        $this->CreateVarProfile('Solarwatt.PowermeterDirection', VARIABLETYPE_STRING, '', 0, 0, 0, 0, '', $associations, $reInstall);
+
+        $associations = [
+            ['Wert' => 'OFF', 'Name' => $this->Translate('Off'), 'Farbe' => -1],
+            ['Wert' => 'CHARGING', 'Name' => $this->Translate('Charging'), 'Farbe' => -1],
+            ['Wert' => 'DISCHARGING', 'Name' => $this->Translate('Discharging'), 'Farbe' => -1],
+        ];
+        $this->CreateVarProfile('Solarwatt.BatteryConverterMode', VARIABLETYPE_STRING, '', 0, 0, 0, 0, '', $associations, $reInstall);
     }
 }

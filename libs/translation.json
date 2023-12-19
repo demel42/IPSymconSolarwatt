@@ -1,6 +1,16 @@
 {
 	"translations": {
 		"de": {
+			"__variableprofile__": "Solarwatt.PowermeterDirection",
+			"Purchase": "Bezug",
+			"Feed-in": "Einspeisung",
+			"In both directions": "In beide Richtungen",
+
+			"__variableprofile__": "Solarwatt.BatteryConverterMode",
+			"Off": "Aus",
+			"Charging": "Laden",
+			"Discharging": "Entladen",
+
 			"__status__": "",
 			"Instance is inactive (access forbidden)": "Instanz ist inaktiv (Zugriff verboten)",
 			"Instance is inactive (server error)": "Instanz ist inaktiv (Serverfehler)",
