@@ -20,7 +20,7 @@
 			"Description": "Beschreibung",
 			"Field": "Feld",
 			"use": "Verwendung",
-			"Variables": "Variablen",
+			"Additional variables": "Zusätzliche Variablen",
 
 			"__variables__": "",
 			"Last update": "letzte Aktualisierung",

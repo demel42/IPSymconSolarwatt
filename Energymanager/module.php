@@ -113,17 +113,25 @@ class SolarwattEnergymanager extends IPSModule
                 $desc = $this->GetArrayElem($ent, 'desc', '');
                 $vartype = $this->GetArrayElem($ent, 'type', '');
                 $varprof = $this->GetArrayElem($ent, 'prof', '');
+                $alias = $this->GetArrayElem($ent, 'alias', '');
 
-                $use = false;
-                foreach ($use_fields as $field) {
-                    if ($ident == $this->GetArrayElem($field, 'ident', '')) {
-                        $use = (bool) $this->GetArrayElem($field, 'use', false);
-                        break;
+                $use = (bool) $this->GetArrayElem($ent, 'mandatory', false);
+                if ($use == false) {
+                    foreach ($use_fields as $field) {
+                        if ($ident == $this->GetArrayElem($field, 'ident', '')) {
+                            $use = (bool) $this->GetArrayElem($field, 'use', false);
+                            break;
+                        }
                     }
                 }
 
+                $name = $this->Translate($desc);
+                if ($alias != '') {
+                    $name = $this->Translate($alias) . ' - ' . $name;
+                }
+
                 $this->SendDebug(__FUNCTION__, 'register variable: ident=' . $ident . ', vartype=' . $vartype . ', varprof=' . $varprof . ', use=' . $this->bool2str($use), 0);
-                $this->MaintainVariable($ident, $this->Translate($desc), $vartype, $varprof, $vpos++, $use);
+                $this->MaintainVariable($ident, $name, $vartype, $varprof, $vpos++, $use);
             }
         }
 
@@ -189,6 +197,11 @@ class SolarwattEnergymanager extends IPSModule
                 $ident = $this->GetArrayElem($ent, 'ident', '');
                 $desc = $this->GetArrayElem($ent, 'desc', '');
                 $alias = $this->GetArrayElem($ent, 'alias', '');
+                $mandatory = (bool) $this->GetArrayElem($ent, 'mandatory', false);
+                if ($mandatory) {
+                    continue;
+                }
+
                 $use = false;
                 foreach ($use_fields as $field) {
                     if ($ident == $this->GetArrayElem($field, 'ident', '')) {
@@ -196,10 +209,15 @@ class SolarwattEnergymanager extends IPSModule
                         break;
                     }
                 }
-                $this->SendDebug(__FUNCTION__, 'ident=' . $ident . ', alias=' . $alias . ', desc=' . $desc, 0);
+
+                $name = $this->Translate($desc);
+                if ($alias != '') {
+                    $name = $this->Translate($alias) . ' - ' . $name;
+                }
+
                 @$varID = $this->GetIDForIdent($ident);
                 $varID = $varID !== false ? '#' . $varID : '';
-                $name = $alias != '' ? $this->Translate($alias) . ' (' . $this->Translate($desc) . ')' : $this->Translate($desc);
+
                 $values[] = [
                     'ident' => $ident,
                     'desc'  => $name,
@@ -218,7 +236,6 @@ class SolarwattEnergymanager extends IPSModule
                     'type'     => 'List',
                     'name'     => 'use_fields',
                     'caption'  => 'Available variables',
-                    'rowCount' => count($values),
                     'add'      => false,
                     'delete'   => false,
                     'columns'  => [
@@ -255,10 +272,12 @@ class SolarwattEnergymanager extends IPSModule
                             'save'    => false,
                         ],
                     ],
-                    'values'   => $values
+                    'values'                      => $values,
+                    'rowCount'                    => count($values),
+                    'loadValuesFromConfiguration' => false,
                 ],
             ],
-            'caption'  => 'Variables',
+            'caption'  => 'Additional variables',
             'expanded' => false,
         ];
 
@@ -413,12 +432,25 @@ class SolarwattEnergymanager extends IPSModule
         $statuscode = $this->do_HttpRequest('/rest/kiwigrid/wizard/devices', '', '', 'GET', $data);
         if ($statuscode == 0) {
             $use_idents = [];
+
             $use_fields = json_decode($this->ReadPropertyString('use_fields'), true);
-            foreach ($use_fields as $field) {
-                $ident = $this->GetArrayElem($field, 'ident', '');
-                $use = (bool) $this->GetArrayElem($field, 'use', false);
-                if ($use && $ident != false) {
-                    $use_idents[] = $ident;
+            $classes = $this->GetClasses();
+            $mapping = $this->GetMapping();
+            foreach ($classes as $class) {
+                foreach ($mapping[$class] as $ent) {
+                    $ident = $this->GetArrayElem($ent, 'ident', '');
+                    $use = (bool) $this->GetArrayElem($ent, 'mandatory', false);
+                    if ($use == false) {
+                        foreach ($use_fields as $field) {
+                            if ($ident == $this->GetArrayElem($field, 'ident', '')) {
+                                $use = (bool) $this->GetArrayElem($field, 'use', false);
+                                break;
+                            }
+                        }
+                    }
+                    if ($use && $ident != '') {
+                        $use_idents[] = $ident;
+                    }
                 }
             }
 
@@ -506,48 +538,15 @@ class SolarwattEnergymanager extends IPSModule
                             if ($varprof != '' && $this->CheckVarProfile4Value($varprof, $val) == false) {
                                 $this->LogMessage(__FUNCTION__ . ': unknown value "' . $raw . '" for variable "' . $ident . '"', KL_WARNING);
                             }
+                            if ($ident == 'Energymanager_Uptime_Pretty') {
+                                $val = $this->FormatDuration((int) (intval($raw) * $factor));
+                            }
                             break;
                     }
 
                     $this->SetValue($ident, $val);
+
                     $fmt = $this->GetValueFormatted($ident);
-                    if ($val > 0 && $varprof == 'Solarwatt.Duration') {
-                        $sec = $val;
-                        $s = '';
-                        if ($sec > 86400) {
-                            $day = floor($sec / 86400);
-                            $sec = $sec % 86400;
-
-                            $sec -= floor($sec % 60);
-                            if ($day > 3) {
-                                $sec -= floor($sec % 3600);
-                            }
-                            if ($day > 10) {
-                                $sec -= floor($sec % 86400);
-                            }
-
-                            $s .= sprintf('%dd', $day);
-                        }
-                        if ($sec > 3600) {
-                            $hour = floor($sec / 3600);
-                            $sec = $sec % 3600;
-
-                            $s .= sprintf('%dh', $hour);
-                        }
-                        if ($sec > 60) {
-                            $min = floor($sec / 60);
-                            $sec = $sec % 60;
-
-                            $s .= sprintf('%dm', $min);
-                        }
-                        if ($sec > 0) {
-                            $s .= sprintf('%ds', $sec);
-                        }
-
-                        $d = date('d.m.Y H:i', time() - $val);
-
-                        $fmt .= ' (' . $s . ' / ' . $d . ')';
-                    }
                     $this->SendDebug(__FUNCTION__, 'set ' . $fld . '="' . $raw . '" to ' . $ident . ' => ' . $fmt, 0);
                 }
             }
@@ -634,11 +633,11 @@ class SolarwattEnergymanager extends IPSModule
         $mapping = [
             'Location' => [
                 [
-                    'desc'  => 'State of location',
-                    'ident' => 'Location_State',
-                    'elem'  => 'StateDevice',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
+                    'desc'      => 'State of location',
+                    'ident'     => 'Location_State',
+                    'elem'      => 'StateDevice',
+                    'type'      => VARIABLETYPE_STRING,
+                    'mandatory' => true,
                 ],
                 [
                     'desc'  => 'Power stored in the storage',
@@ -663,12 +662,13 @@ class SolarwattEnergymanager extends IPSModule
                     'prof'  => 'Solarwatt.W',
                 ],
                 [
-                    'desc'  => 'Total power consumed',
-                    'alias' => 'Consumption',
-                    'ident' => 'PowerConsumed',
-                    'elem'  => 'PowerConsumed',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'Solarwatt.W',
+                    'desc'      => 'Total power consumed',
+                    'alias'     => 'Consumption',
+                    'ident'     => 'PowerConsumed',
+                    'elem'      => 'PowerConsumed',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.W',
+                    'mandatory' => true,
                 ],
                 [
                     'desc'  => 'Power consumed from the grid',
@@ -678,12 +678,13 @@ class SolarwattEnergymanager extends IPSModule
                     'prof'  => 'Solarwatt.W',
                 ],
                 [
-                    'desc'   => 'Power consumed from the PV',
-                    'alias'  => 'Direct consumption',
-                    'ident'  => 'PowerConsumedFromPV',
-                    'elem'   => 'PowerConsumedFromProducers',
-                    'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.W',
+                    'desc'      => 'Power consumed from the PV',
+                    'alias'     => 'Direct consumption',
+                    'ident'     => 'PowerConsumedFromPV',
+                    'elem'      => 'PowerConsumedFromProducers',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.W',
+                    'mandatory' => true,
                 ],
                 [
                     'desc'  => 'Power consumed from the storage',
@@ -694,20 +695,22 @@ class SolarwattEnergymanager extends IPSModule
                     'prof'  => 'Solarwatt.W',
                 ],
                 [
-                    'desc'  => 'Power fed from the grid',
-                    'alias' => 'Purchased',
-                    'ident' => 'PowerFromGrid',
-                    'elem'  => 'PowerIn',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'Solarwatt.W',
+                    'desc'      => 'Power fed from the grid',
+                    'alias'     => 'Purchased',
+                    'ident'     => 'PowerFromGrid',
+                    'elem'      => 'PowerIn',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.W',
+                    'mandatory' => true,
                 ],
                 [
-                    'desc'  => 'Power delivered to the grid',
-                    'alias' => 'Feed-in',
-                    'ident' => 'PowerToGrid',
-                    'elem'  => 'PowerOut',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'Solarwatt.W',
+                    'desc'      => 'Power delivered to the grid',
+                    'alias'     => 'Feed-in',
+                    'ident'     => 'PowerToGrid',
+                    'elem'      => 'PowerOut',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.W',
+                    'mandatory' => true,
                 ],
                 [
                     'desc'  => 'Power delivered to the grid direct from the PV',
@@ -724,12 +727,13 @@ class SolarwattEnergymanager extends IPSModule
                     'prof'  => 'Solarwatt.W',
                 ],
                 [
-                    'desc'  => 'Total power produced',
-                    'alias' => 'Production',
-                    'ident' => 'PowerProduced',
-                    'elem'  => 'PowerProduced',
-                    'type'  => VARIABLETYPE_FLOAT,
-                    'prof'  => 'Solarwatt.W',
+                    'desc'      => 'Total power produced',
+                    'alias'     => 'Production',
+                    'ident'     => 'PowerProduced',
+                    'elem'      => 'PowerProduced',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.W',
+                    'mandatory' => true,
                 ],
                 [
                     'desc'   => 'Power consumed direct from the PV plus energy stored',
@@ -770,13 +774,14 @@ class SolarwattEnergymanager extends IPSModule
                     'prof'  => 'Solarwatt.Wh',
                 ],
                 [
-                    'desc'   => 'Total energy consumed',
-                    'alias'  => 'Consumption',
-                    'ident'  => 'EnergyConsumed',
-                    'elem'   => 'WorkConsumed',
-                    'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.kWh',
-                    'factor' => 1 / 1000,
+                    'desc'      => 'Total energy consumed',
+                    'alias'     => 'Consumption',
+                    'ident'     => 'EnergyConsumed',
+                    'elem'      => 'WorkConsumed',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.kWh',
+                    'factor'    => 1 / 1000,
+                    'mandatory' => true,
                 ],
                 [
                     'desc'   => 'Energy consumed from the grid',
@@ -787,13 +792,14 @@ class SolarwattEnergymanager extends IPSModule
                     'factor' => 1 / 1000,
                 ],
                 [
-                    'desc'   => 'Energy consumed from the PV',
-                    'alias'  => 'Direct consumption',
-                    'ident'  => 'EnergyConsumedFromPV',
-                    'elem'   => 'WorkConsumedFromProducers',
-                    'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.kWh',
-                    'factor' => 1 / 1000,
+                    'desc'      => 'Energy consumed from the PV',
+                    'alias'     => 'Direct consumption',
+                    'ident'     => 'EnergyConsumedFromPV',
+                    'elem'      => 'WorkConsumedFromProducers',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.kWh',
+                    'factor'    => 1 / 1000,
+                    'mandatory' => true,
                 ],
                 [
                     'desc'   => 'Energy consumed from the storage',
@@ -805,22 +811,24 @@ class SolarwattEnergymanager extends IPSModule
                     'factor' => 1 / 1000,
                 ],
                 [
-                    'desc'   => 'Energy fed from the grid',
-                    'alias'  => 'Purchased',
-                    'ident'  => 'EnergyFromGrid',
-                    'elem'   => 'WorkIn',
-                    'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.kWh',
-                    'factor' => 1 / 1000,
+                    'desc'      => 'Energy fed from the grid',
+                    'alias'     => 'Purchased',
+                    'ident'     => 'EnergyFromGrid',
+                    'elem'      => 'WorkIn',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.kWh',
+                    'factor'    => 1 / 1000,
+                    'mandatory' => true,
                 ],
                 [
-                    'desc'   => 'Energy delivered to the grid',
-                    'alias'  => 'Feed-in',
-                    'ident'  => 'EnergyToGrid',
-                    'elem'   => 'WorkOut',
-                    'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.kWh',
-                    'factor' => 1 / 1000,
+                    'desc'      => 'Energy delivered to the grid',
+                    'alias'     => 'Feed-in',
+                    'ident'     => 'EnergyToGrid',
+                    'elem'      => 'WorkOut',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.kWh',
+                    'factor'    => 1 / 1000,
+                    'mandatory' => true,
                 ],
                 [
                     'desc'   => 'Energy delivered to the grid direct from the PV',
@@ -839,13 +847,14 @@ class SolarwattEnergymanager extends IPSModule
                     'factor' => 1 / 1000,
                 ],
                 [
-                    'desc'   => 'Total energy produced',
-                    'alias'  => 'Production',
-                    'ident'  => 'EnergyProduced',
-                    'elem'   => 'WorkProduced',
-                    'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.kWh',
-                    'factor' => 1 / 1000,
+                    'desc'      => 'Total energy produced',
+                    'alias'     => 'Production',
+                    'ident'     => 'EnergyProduced',
+                    'elem'      => 'WorkProduced',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.kWh',
+                    'factor'    => 1 / 1000,
+                    'mandatory' => true,
                 ],
                 [
                     'desc'   => 'Energy consumed direct from the PV plus energy stored',
@@ -866,11 +875,11 @@ class SolarwattEnergymanager extends IPSModule
             ],
             'EnergyManager' => [
                 [
-                    'desc'  => 'State of the energymanager',
-                    'ident' => 'Energymanager_State',
-                    'elem'  => 'StateDevice',
-                    'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
+                    'desc'      => 'State of the energymanager',
+                    'ident'     => 'Energymanager_State',
+                    'elem'      => 'StateDevice',
+                    'type'      => VARIABLETYPE_STRING,
+                    'mandatory' => true,
                 ],
                 [
                     'desc'   => 'Uptime of the energymanager',
@@ -878,6 +887,13 @@ class SolarwattEnergymanager extends IPSModule
                     'elem'   => 'TimeSinceStart',
                     'type'   => VARIABLETYPE_INTEGER,
                     'prof'   => 'Solarwatt.Duration',
+                    'factor' => 1 / 1000,
+                ],
+                [
+                    'desc'   => 'Uptime of the energymanager',
+                    'ident'  => 'Energymanager_Uptime_Pretty',
+                    'elem'   => 'TimeSinceStart',
+                    'type'   => VARIABLETYPE_STRING,
                     'factor' => 1 / 1000,
                 ],
                 [
@@ -969,7 +985,6 @@ class SolarwattEnergymanager extends IPSModule
                     'ident' => 'S0Counter_State',
                     'elem'  => 'StateDevice',
                     'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
                 ],
             ],
             'PVPlant' => [
@@ -978,7 +993,6 @@ class SolarwattEnergymanager extends IPSModule
                     'ident' => 'PV_State',
                     'elem'  => 'StateDevice',
                     'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
                 ],
                 [
                     'desc'  => 'Power produced by the PV',
@@ -1008,7 +1022,6 @@ class SolarwattEnergymanager extends IPSModule
                     'ident' => 'Battery_State',
                     'elem'  => 'StateDevice',
                     'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
                 ],
                 [
                     'desc'  => 'State of charge of the battery',
@@ -1081,16 +1094,14 @@ class SolarwattEnergymanager extends IPSModule
                     'ident'  => 'Battery_EnergyCharged',
                     'elem'   => 'WorkCharged',
                     'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.kWh',
-                    'factor' => 1 / 1000,
+                    'prof'   => 'Solarwatt.Wh',
                 ],
                 [
                     'desc'   => 'Energy discharged out of the battery',
                     'ident'  => 'Battery_EnergyDischarged',
                     'elem'   => 'WorkDischarged',
                     'type'   => VARIABLETYPE_FLOAT,
-                    'prof'   => 'Solarwatt.kWh',
-                    'factor' => 1 / 1000,
+                    'prof'   => 'Solarwatt.Wh',
                 ],
             ],
             'BatteryFlexPowermeter' => [
@@ -1099,7 +1110,6 @@ class SolarwattEnergymanager extends IPSModule
                     'ident' => 'BatteryPowermeter_State',
                     'elem'  => 'StateDevice',
                     'type'  => VARIABLETYPE_STRING,
-                    'prof'  => '',
                 ],
                 [
                     'desc'  => 'Metering direction of the battery powermeter',
@@ -1140,6 +1150,32 @@ class SolarwattEnergymanager extends IPSModule
         ];
 
         return $classes;
+    }
+
+    private function FormatDuration(int $sec)
+    {
+        $ret = '';
+
+        if ($sec > 86400) {
+            $day = floor($sec / 86400);
+            $sec = $sec % 86400;
+            $ret .= sprintf('%dd', $day);
+        }
+        if ($sec > 3600) {
+            $hour = floor($sec / 3600);
+            $sec = $sec % 3600;
+            $ret .= sprintf('%dh', $hour);
+        }
+        if ($sec > 60) {
+            $min = floor($sec / 60);
+            $sec = $sec % 60;
+            $ret .= sprintf('%dm', $min);
+        }
+        if ($sec > 0) {
+            $ret .= sprintf('%ds', $sec);
+        }
+
+        return $ret;
     }
 }
 /*
