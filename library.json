@@ -2,11 +2,11 @@
 	"id": "{CB7A9B0B-CCF1-9021-F31C-560F8F222F42}",
 	"name": "Solarwatt",
 	"author": "Ch. Damsky",
-	"url": "https://github.com/demel42/ModuleTenmplate.git",
+	"url": "https://github.com/demel42/IPSymconSolarwatt.git",
 	"compatibility": {
-		"version": "6.0"
+		"version": "6.5"
 	},
-	"version": "0.9",
+	"version": "1.0",
 	"build": 0,
-	"date": 0
+	"date": 1703241115
 }

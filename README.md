@@ -16,6 +16,8 @@
 
 ## 1. Funktionsumfang
 
+Auslesen der Daten eines Solarwatt Energymanager 
+
 ## 2. Voraussetzungen
 
 - IP-Symcon ab Version 6.0
@@ -29,9 +31,21 @@ Alternativ kann das Modul über [Module Control](https://www.symcon.de/service/d
 
 ### b. Einrichtung in IPS
 
+Instanz *Solarwatt Energymanager* anlegen und parametrieren.
+
+Das Passwort ist nur für die (noch nicht implementierte) Funktion des Energymanager-Reboots erforderlich.
+
+Die Variablen für *Leistung* sollten sinnvollerweise auf Logging gestellt werden, die für *Energie* sind dann als *Zählervariablen* nutzbar.
+
+Der Umfang der Variablen hängt von der verwendeten Hardware bzw eingebundenen Geräten ab, ich habe eine Konfiguration von PV-Modulen (_PVPlant_) mit Speicher (_BatteryFlex + _BatteryFlex ACS__); dazu gehört auch immer der _S0Counter_ (der die netzseitige Energiemessung durchführt). Der _Energymanager_ führt die Daten zusammen (auch die wesentlichen Daten des Wechselrichters) und legt die unter dem Begriff _Location_ (aka _Standort_) ab.
+Die Menge an Variablen ist teilweise nicht so einfach zuzuordnen und in der Nomenklatur auch nicht immer eindeutig - die wichtisgten Variablen ­ die auch im Portal verwendet werden - sind eigens im Variablennamen gekennzeichnet.
+
+Der Abruf erfolgt rein lokal.
+
 ## 4. Funktionsreferenz
 
-alle Funktionen sind über _RequestAction_ der jew. Variablen ansteuerbar
+`Solarwatt_UpdateStatus(int $InstanzID)`<br>
+Abruf aller Daten vom Energymanager
 
 ## 5. Konfiguration
 
@@ -43,19 +57,36 @@ alle Funktionen sind über _RequestAction_ der jew. Variablen ansteuerbar
 | :------------------------ | :------  | :----------- | :----------- |
 | Instanz deaktivieren      | boolean  | false        | Instanz temporär deaktivieren |
 |                           |          |              | |
+| Host                      | string   |              | Hostname / IP-Adresse des Energymanagers im lokalen Netz |
+| Password                  | string   |              | Passwort des Energymanagers, steht auf der Oberseite des Moduls |
+|                           |          |              | |
+| zusätzliche Variablen     | list     |              | Liste von optionalen Variablen |
 
 #### Aktionen
 
 | Bezeichnung                | Beschreibung |
 | :------------------------- | :----------- |
+| Status aktualisieren       |              |
 
 ### Variablenprofile
 
 Es werden folgende Variablenprofile angelegt:
-* Boolean<br>
 * Integer<br>
+Solarwatt.Duration
+
 * Float<br>
+Solarwatt.GB,
+Solarwatt.kW,
+Solarwatt.kWh,
+Solarwatt.Load,
+Solarwatt.MB,
+Solarwatt.Percent,
+Solarwatt.Temperature,
+Solarwatt.W,
+Solarwatt.Wh
+
 * String<br>
+Solarwatt.PowermeterDirection
 
 ## 6. Anhang
 
@@ -69,5 +100,5 @@ Es werden folgende Variablenprofile angelegt:
 
 ## 7. Versions-Historie
 
-- 0.9 @ dd.mm.yyyy HH:MM (beta)
+- 1.0 @ 22.12.2023 11:31
   - Initiale Version
