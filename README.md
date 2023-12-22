@@ -16,7 +16,7 @@
 
 ## 1. Funktionsumfang
 
-Auslesen der Daten eines Solarwatt Energymanager 
+Auslesen der Daten eines Solarwatt Energiemanager - diese werden auch im _Solarwatt Managerportal_ angezeigt.
 
 ## 2. Voraussetzungen
 
@@ -26,18 +26,18 @@ Auslesen der Daten eines Solarwatt Energymanager
 
 ### a. Installation des Moduls
 
-Im [Module Store](https://www.symcon.de/service/dokumentation/komponenten/verwaltungskonsole/module-store/) ist das Modul unter dem Suchbegriff *Solarwatt Energymanager* zu finden.<br>
+Im [Module Store](https://www.symcon.de/service/dokumentation/komponenten/verwaltungskonsole/module-store/) ist das Modul unter dem Suchbegriff *Solarwatt Energiemanager* zu finden.<br>
 Alternativ kann das Modul über [Module Control](https://www.symcon.de/service/dokumentation/modulreferenz/module-control/) unter Angabe der URL `https://github.com/demel42/Solarwatt.git` installiert werden.
 
 ### b. Einrichtung in IPS
 
-Instanz *Solarwatt Energymanager* anlegen und parametrieren.
+Instanz *Solarwatt Energiemanager* anlegen und parametrieren.
 
-Das Passwort ist nur für die (noch nicht implementierte) Funktion des Energymanager-Reboots erforderlich.
+Das Passwort ist nur für die (noch nicht implementierte) Funktion des Energiemanager-Reboots erforderlich.
 
 Die Variablen für *Leistung* sollten sinnvollerweise auf Logging gestellt werden, die für *Energie* sind dann als *Zählervariablen* nutzbar.
 
-Der Umfang der Variablen hängt von der verwendeten Hardware bzw eingebundenen Geräten ab, ich habe eine Konfiguration von PV-Modulen (_PVPlant_) mit Speicher (_BatteryFlex + _BatteryFlex ACS__); dazu gehört auch immer der _S0Counter_ (der die netzseitige Energiemessung durchführt). Der _Energymanager_ führt die Daten zusammen (auch die wesentlichen Daten des Wechselrichters) und legt die unter dem Begriff _Location_ (aka _Standort_) ab.
+Der Umfang der Variablen hängt von der verwendeten Hardware bzw eingebundenen Geräten ab, ich habe eine Konfiguration von PV-Modulen (_PVPlant_) mit Speicher (_BatteryFlex + _BatteryFlex ACS__); dazu gehört auch immer der _S0Counter_ (der die netzseitige Energiemessung durchführt). Der _Energiemanager_ führt die Daten zusammen (auch die wesentlichen Daten des Wechselrichters) und legt die unter dem Begriff _Location_ (aka _Standort_) ab.
 Die Menge an Variablen ist teilweise nicht so einfach zuzuordnen und in der Nomenklatur auch nicht immer eindeutig - die wichtisgten Variablen ­ die auch im Portal verwendet werden - sind eigens im Variablennamen gekennzeichnet.
 
 Der Abruf erfolgt rein lokal.
@@ -45,11 +45,11 @@ Der Abruf erfolgt rein lokal.
 ## 4. Funktionsreferenz
 
 `Solarwatt_UpdateStatus(int $InstanzID)`<br>
-Abruf aller Daten vom Energymanager
+Abruf aller Daten vom Energiemanager
 
 ## 5. Konfiguration
 
-### Energymanager Device
+### Energiemanager
 
 #### Properties
 
@@ -57,8 +57,8 @@ Abruf aller Daten vom Energymanager
 | :------------------------ | :------  | :----------- | :----------- |
 | Instanz deaktivieren      | boolean  | false        | Instanz temporär deaktivieren |
 |                           |          |              | |
-| Host                      | string   |              | Hostname / IP-Adresse des Energymanagers im lokalen Netz |
-| Password                  | string   |              | Passwort des Energymanagers, steht auf der Oberseite des Moduls |
+| Host                      | string   |              | Hostname / IP-Adresse des Energiemanagers im lokalen Netz |
+| Password                  | string   |              | Passwort des Energiemanagers, steht auf der Oberseite des Moduls |
 |                           |          |              | |
 | zusätzliche Variablen     | list     |              | Liste von optionalen Variablen |
 
