@@ -1,9 +1,9 @@
 {
 	"id": "{1F4D83D3-2A88-1CA5-B39C-CF7D616062FF}",
-	"name": "Solarwatt Energiemanager",
+	"name": "SolarwattEnergymanager",
 	"type": 3,
 	"vendor": "",
-	"aliases": [],
+	"aliases": [ "Solarwatt Energymanager" ],
 	"parentRequirements": [],
 	"childRequirements": [],
 	"implemented": [],

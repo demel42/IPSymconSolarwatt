@@ -93,12 +93,12 @@ Solarwatt.PowermeterDirection
 ### GUIDs
 - Modul: `{CB7A9B0B-CCF1-9021-F31C-560F8F222F42}`
 - Instanzen:
-  - Energymanager: `{1F4D83D3-2A88-1CA5-B39C-CF7D616062FF}`
+  - SolarwattEnergymanager: `{1F4D83D3-2A88-1CA5-B39C-CF7D616062FF}`
 - Nachrichten:
 
 ### Quellen
 
 ## 7. Versions-Historie
 
-- 1.0 @ 22.12.2023 11:31
+- 1.0 @ 28.12.2023 14:24
   - Initiale Version
