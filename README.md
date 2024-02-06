@@ -100,5 +100,9 @@ Solarwatt.PowermeterDirection
 
 ## 7. Versions-Historie
 
+- 1.1 @ 06.02.2024 09:46
+  - Verbesserung: Angleichung interner Bibliotheken anlässlich IPS 7
+  - update submodule CommonStubs
+
 - 1.0 @ 28.12.2023 14:24
   - Initiale Version
