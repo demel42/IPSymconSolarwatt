@@ -39,7 +39,7 @@
 			"Power delivered to the grid direct from the PV": "Leistung, der direkt von der PV-Anlage ins Netz eingespeist wird",
 			"Power delivered to the grid direct from the storage": "Direkt aus dem Speicher ins Netz eingespeister Leistung",
 			"Total power produced": "Gesamte erzeugte Leistung",
-			"Power consumed direct from the PV plus energy stored": "Direkt von der PV verbrauchte Leistung plus gespeicherte Energie",
+			"Power consumed direct from the PV plus energy stored": "Direkt von der PV verbrauchte plus gespeicherte Leistung",
 			"Power consumed direct from the PV and from the storage": "Verbrauchte Leistung direkt von der PV sowie aus dem Speicher",
 			"Energy stored in the storage": "Im Speicher gespeicherte Energie",
 			"Energy from grid stored in the storage": "Im Speicher gespeicherte Energie aus dem Netz",
@@ -99,6 +99,10 @@
 			"Metering direction of the battery powermeter": "Zählrichtung des Batterie-Leistungsmessers",
 			"Energy fed into the battery": "In die Batterie eingespeiste Energie",
 			"Energy supplied from the battery": "Aus der Batterie abgegebene Energie",
+
+			"__variables__": "Calculated",
+			"Balanced grid power": "saldierte Netzleistung",
+			"PV surplus power (without storage discharging)": "PV-Überschussleistung (ohne Speicherentladung)",
 
 			"__variables__": "__alias__",
 			"Stored": "Gespeichert",

@@ -14,7 +14,7 @@ class SolarwattEnergymanager extends IPSModule
     {
         parent::__construct($InstanceID);
 
-        $this->CommonContruct(__DIR__);
+        $this->CommonConstruct(__DIR__);
     }
 
     public function __destruct()
@@ -193,7 +193,7 @@ class SolarwattEnergymanager extends IPSModule
         foreach ($classes as $class) {
             foreach ($mapping[$class] as $ent) {
                 $elem = $this->GetArrayElem($ent, 'elem', '');
-                $fld = $class . '/' . $elem;
+                $fld = $elem ? ($class . '/' . $elem) : '';
                 $ident = $this->GetArrayElem($ent, 'ident', '');
                 $desc = $this->GetArrayElem($ent, 'desc', '');
                 $alias = $this->GetArrayElem($ent, 'alias', '');
@@ -437,6 +437,9 @@ class SolarwattEnergymanager extends IPSModule
             $classes = $this->GetClasses();
             $mapping = $this->GetMapping();
             foreach ($classes as $class) {
+                if ($class == 'Calculated') {
+                    continue;
+                }
                 foreach ($mapping[$class] as $ent) {
                     $ident = $this->GetArrayElem($ent, 'ident', '');
                     $use = (bool) $this->GetArrayElem($ent, 'mandatory', false);
@@ -516,6 +519,9 @@ class SolarwattEnergymanager extends IPSModule
                     $varprof = $this->GetArrayElem($ent, 'prof', '');
                     $factor = (float) $this->GetArrayElem($ent, 'factor', 1);
                     $elem = $this->GetArrayElem($ent, 'elem', '');
+                    if ($elem == '') {
+                        continue;
+                    }
                     $fld = $class . '.devices.' . $idx . '.vars.' . $elem;
                     $raw = $this->GetArrayElem($components, $fld, '', $fnd);
                     if ($fnd == false) {
@@ -558,6 +564,9 @@ class SolarwattEnergymanager extends IPSModule
                 $energyList = [];
                 foreach ($mapping[$class] as $ent) {
                     $elem = $this->GetArrayElem($ent, 'elem', '');
+                    if ($elem == '') {
+                        continue;
+                    }
                     $ident = $this->GetArrayElem($ent, 'ident', '');
                     $fld = $class . '.devices.' . $idx . '.vars.' . $elem;
                     $raw = $this->GetArrayElem($components, $fld, '', $fnd);
@@ -581,6 +590,40 @@ class SolarwattEnergymanager extends IPSModule
             $this->SendDebug(__FUNCTION__, 'power=' . print_r($powerAll, true), 0);
             $this->SendDebug(__FUNCTION__, 'energy=' . print_r($energyAll, true), 0);
 
+            foreach ($mapping['Calculated'] as $ent) {
+                $ident = $this->GetArrayElem($ent, 'ident', '');
+                $use = (bool) $this->GetArrayElem($ent, 'mandatory', false);
+                if ($use == false) {
+                    foreach ($use_fields as $field) {
+                        if ($ident == $this->GetArrayElem($field, 'ident', '')) {
+                            $use = (bool) $this->GetArrayElem($field, 'use', false);
+                            break;
+                        }
+                    }
+                }
+                if ($use == false) {
+                    continue;
+                }
+                switch ($ident) {
+                    case 'PowerGridBalance':
+                        $PowerToGrid = (float) $this->GetArrayElem($components, 'Location.devices.0.vars.PowerOut', '', $fnd);
+                        $PowerFromGrid = (float) $this->GetArrayElem($components, 'Location.devices.0.vars.PowerIn', '', $fnd);
+                        $PowerGridBalance = $PowerToGrid - $PowerFromGrid;
+                        $this->SetValue($ident, $PowerGridBalance);
+                        break;
+                    case 'PowerSurplus':
+                        $PowerProduced = (float) $this->GetArrayElem($components, 'Location.devices.0.vars.PowerProduced', '', $fnd);
+                        $PowerConsumed = (float) $this->GetArrayElem($components, 'Location.devices.0.vars.PowerConsumed', '', $fnd);
+                        $PowerConsumedFromStorage = (float) $this->GetArrayElem($components, 'Location.devices.0.vars.PowerConsumedFromStorage', '', $fnd);
+                        $PowerSurplus = $PowerProduced - $PowerConsumedFromStorage - $PowerConsumed;
+                        $this->SetValue($ident, $PowerSurplus);
+                        break;
+                    default:
+                        break;
+                }
+                $fmt = $this->GetValueFormatted($ident);
+                $this->SendDebug(__FUNCTION__, 'calculate ' . $ident . ' => ' . $fmt, 0);
+            }
             $this->SetValue('LastUpdate', $now);
         }
 
@@ -1133,6 +1176,20 @@ class SolarwattEnergymanager extends IPSModule
                     'prof'  => 'Solarwatt.Wh',
                 ],
             ],
+            'Calculated' => [
+                [
+                    'desc'      => 'Balanced grid power',
+                    'ident'     => 'PowerGridBalance',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.W',
+                ],
+                [
+                    'desc'      => 'PV surplus power (without storage discharging)',
+                    'ident'     => 'PowerSurplus',
+                    'type'      => VARIABLETYPE_FLOAT,
+                    'prof'      => 'Solarwatt.W',
+                ],
+            ],
         ];
 
         return $mapping;
@@ -1147,6 +1204,7 @@ class SolarwattEnergymanager extends IPSModule
             'PVPlant',
             'BatteryFlex',
             'BatteryFlexPowermeter',
+            'Calculated',
         ];
 
         return $classes;
@@ -1178,13 +1236,3 @@ class SolarwattEnergymanager extends IPSModule
         return $ret;
     }
 }
-/*
-[PowerStringDCIn] =>
-[PowerYieldSum] =>
-[ResistanceBatteryMax] => 0.002
-[ResistanceBatteryMean] => 0.002
-[ResistanceBatteryMin] => 0.002
-[ResistanceBatteryString] =>
-[TemperatureBatteryCellMax] => 22
-[TemperatureBatteryCellMin] => 19
- */
