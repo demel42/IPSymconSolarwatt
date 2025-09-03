@@ -100,6 +100,9 @@ Solarwatt.PowermeterDirection
 
 ## 7. Versions-Historie
 
+- 1.3 @ 03.09.2025 17:05
+  - Fix: Angabe zum "vendor" fehlte
+
 - 1.2 @ 02.01.2025 14:28
   - Neu: berechnete Werte
   - interne Änderung
