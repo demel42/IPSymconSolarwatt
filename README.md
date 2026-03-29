@@ -100,6 +100,11 @@ Solarwatt.PowermeterDirection
 
 ## 7. Versions-Historie
 
+- 1.4 @ 29.03.2026 15:04
+  - Fix: Anpassung für IPS 9
+  - interne Änderung
+  - update submodule CommonStubs
+
 - 1.3 @ 03.09.2025 17:05
   - Fix: Angabe zum "vendor" fehlte
 
