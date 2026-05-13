@@ -100,6 +100,10 @@ Solarwatt.PowermeterDirection
 
 ## 7. Versions-Historie
 
+- 1.5 @ 11.05.2026 15:02
+  - Fix: Änderung von deprecated php code
+  - update submodule CommonStubs
+
 - 1.4 @ 29.03.2026 15:04
   - Fix: Anpassung für IPS 9
   - interne Änderung

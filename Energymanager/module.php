@@ -329,7 +329,7 @@ class SolarwattEnergymanager extends IPSModule
         return $formActions;
     }
 
-    private function SetUpdateInterval(int $sec = null)
+    private function SetUpdateInterval(?int $sec = null)
     {
         if (is_null($sec)) {
             $sec = $this->ReadPropertyInteger('update_interval');
@@ -379,7 +379,9 @@ class SolarwattEnergymanager extends IPSModule
         $cerrno = curl_errno($ch);
         $cerror = $cerrno ? curl_error($ch) : '';
         $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (IPS_GetKernelVersion() < 8.5) {
+            curl_close($ch);
+        }
 
         $duration = round(microtime(true) - $time_start, 2);
         $this->SendDebug(__FUNCTION__, ' => errno=' . $cerrno . ', httpcode=' . $httpcode . ', duration=' . $duration . 's', 0);
@@ -458,7 +460,7 @@ class SolarwattEnergymanager extends IPSModule
             }
 
             $components = [];
-            if (isset($data['result']['items'])) {
+            if (isset($data['result']['items']) && is_array($data['result']['items'])) {
                 $items = $data['result']['items'];
                 foreach ($items as $item) {
                     $tagValues = $item['tagValues'];
@@ -477,7 +479,11 @@ class SolarwattEnergymanager extends IPSModule
                     ksort($vars);
                     $guid = $item['guid'];
                     $models = $item['deviceModel'];
-                    $class = count($item['deviceModel']) ? $item['deviceModel'][count($item['deviceModel']) - 1]['deviceClass'] : '';
+                    if (is_array($item['deviceModel']) && ount($item['deviceModel'])) {
+                        $class = $item['deviceModel'][count($item['deviceModel']) - 1]['deviceClass'];
+                    } else {
+                        $class = '';
+                    }
                     $r = preg_split('/\./', $class);
                     $type = count($r) ? $r[count($r) - 1] : '';
 
