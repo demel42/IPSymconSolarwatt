@@ -479,7 +479,7 @@ class SolarwattEnergymanager extends IPSModule
                     ksort($vars);
                     $guid = $item['guid'];
                     $models = $item['deviceModel'];
-                    if (is_array($item['deviceModel']) && ount($item['deviceModel'])) {
+                    if (is_array($item['deviceModel']) && count($item['deviceModel'])) {
                         $class = $item['deviceModel'][count($item['deviceModel']) - 1]['deviceClass'];
                     } else {
                         $class = '';
